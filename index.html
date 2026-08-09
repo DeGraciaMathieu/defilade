@@ -174,6 +174,7 @@ import {
 import { createRng } from './src/rules/rng.js';
 import { losClear as losRule, observed as observedRule } from './src/rules/los.js';
 import { computeReach, pathTo } from './src/rules/reach.js';
+import { blockReason as blockReasonRule } from './src/rules/orders.js';
 
 /* graine décidée ici (à terme dans main.js) ; le code de règles ne touche jamais Math.random */
 let rng = createRng((Math.random()*4294967296)>>>0);
@@ -614,23 +615,7 @@ function pickSpot(e){
 }
 
 /* ---------------- exécution ---------------- */
-function ammoNeeded(){
-  const n = {};
-  for (const g of guns)
-    if (g.alive && g.order && g.order.type === 'fire') n[g.order.ammo] = (n[g.order.ammo]||0) + 1;
-  return n;
-}
-function blockReason(){
-  const n = ammoNeeded();
-  for (const k in n) if (n[k] > stock[k]) return 'Stock insuffisant : ' + AMMO[k].name.toLowerCase() + '.';
-  for (const g of guns){
-    if (!g.alive || !g.order || g.order.type !== 'fire') continue;
-    const a = g.order.aim;
-    if (Math.hypot(a.x-g.x, a.y-g.y) > MAXRANGE) return 'Pièce ' + g.id + ' : objectif hors portée.';
-    if (g.order.ammo === 'gui' && !observed(a.x, a.y)) return 'Pièce ' + g.id + ' : guidage sans observation.';
-  }
-  return '';
-}
+const blockReason = () => blockReasonRule(guns, stock, vis, drones);
 function execute(){
   if (phase !== 'plan' || blockReason()) return;
   phase = 'resolve'; rt = 0; settle = 0;
