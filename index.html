@@ -147,7 +147,7 @@
 <script type="module">
 import {
   W, H, CELL, COLS, ROWS, MPP,
-  MAXRANGE, E_RANGE, VIS_R, WOOD_VIS_R, DRONE_R,
+  MAXRANGE, VIS_R, WOOD_VIS_R, DRONE_R,
   T_OPEN, T_WOOD, T_ROAD, T_MARSH, T_ROCK, TER,
   HILL_COUNT, MARSH_BELOW, MARSH_P, ROCK_ABOVE, ROCK_P, GROVE_COUNT,
   MOVE_GUN, MOVE_OBS, MOVE_TICKS,
@@ -156,11 +156,6 @@ import {
   THREAT_MAX, GUN_HP,
   OBSERVE_NEAR, OBSERVE_GOOD,
   SETTLE_TICKS, VIS_RECALC_PERIOD, THREAT_DECAY, PLOT_STALE_AGE,
-  AI_PICK_BEST_P, AI_STALE_FIRE_P, AI_THREAT_FLINCH, AI_FLINCH_MOVE_P,
-  AI_THREAT_MOVE, AI_RESTLESS_P, AI_HARASS_P, PZONE_MAX_USES,
-  AI_SAMPLES, AI_MIN_MOVE, AI_KEEP_X, AI_SPACING,
-  SCORE_JITTER, SCORE_UNSEEN, SCORE_WOOD, SCORE_MARSH, SCORE_ROAD,
-  SCORE_IN_RANGE, SCORE_OUT_RANGE, SCORE_ELEV_W, SCORE_DIST_W, SCORE_SPACING_PEN,
   GUN_X_MIN, GUN_X_SPAN, GUN_Y_TOP, GUN_Y_STEP, GUN_Y_JITTER, FO_DX,
   PZONE_JX, PZONE_JY, PZONE_R,
   ENEMY_X_MIN, ENEMY_X_SPAN, ENEMY_Y_TOP, ENEMY_Y_STEP, ENEMY_Y_JITTER,
@@ -174,6 +169,7 @@ import { blockReason as blockReasonRule } from './src/rules/orders.js';
 import { accumulateSignature, locationPlot, soundPlot } from './src/rules/signature.js';
 import { fireShell, guidedSnap, icmSubs, enemySalvo } from './src/rules/fire.js';
 import { resolveImpact } from './src/rules/impact.js';
+import { planAI as planAIRule } from './src/rules/ai.js';
 
 /* graine décidée ici (à terme dans main.js) ; le code de règles ne touche jamais Math.random */
 let rng = createRng((Math.random()*4294967296)>>>0);
@@ -386,7 +382,6 @@ function genTerrainTypes(){
     }
   }
 }
-const elevPx = (x,y) => elev[ei(clamp(Math.floor(x/CELL),0,COLS-1), clamp(Math.floor(y/CELL),0,ROWS-1))];
 function computeVis(){
   const ox = clamp(Math.floor(fo.x/CELL),0,COLS-1), oy = clamp(Math.floor(fo.y/CELL),0,ROWS-1);
   const range = ter[ei(ox,oy)] === T_WOOD ? WOOD_VIS_R : VIS_R;   // sous couvert, on ne voit rien venir
@@ -545,72 +540,10 @@ function explode(x,y,power,enemyFire){
 }
 
 /* ---------------- IA ---------------- */
-function livePlots(){
-  const out = [];
-  for (const g of guns) if (g.alive && g.ePlot) out.push({ g, p: g.ePlot });
-  return out;
-}
 function planAI(){
-  eOrders = [];
-  const plots = livePlots();
-  for (const e of enemies){
-    if (!e.alive){ eOrders.push(null); continue; }
-    const reach = plots.filter(o => Math.hypot(o.p.x-e.x, o.p.y-e.y) < E_RANGE);
-    const fresh = reach.filter(o => !o.p.stale);
-    let target = null;
-    if (fresh.length){
-      fresh.sort((a,b) => a.p.err - b.p.err);
-      target = fresh[rng() < AI_PICK_BEST_P ? 0 : Math.floor(rng()*fresh.length)];
-    } else if (reach.length && rng() < AI_STALE_FIRE_P){
-      target = reach[Math.floor(rng()*reach.length)];   // ils tirent sur une position abandonnée
-    }
-    let order = null;
-    if (target){
-      // sous la menace, elle hésite entre décrocher et placer un coup de plus
-      if (e.threat >= AI_THREAT_FLINCH && rng() < AI_FLINCH_MOVE_P) order = { type:'move', to: pickSpot(e) };
-      else order = { type:'fire', at: { x: target.p.x, y: target.p.y } };
-    } else if (pZone && pZone.uses < PZONE_MAX_USES && rng() < AI_HARASS_P * (1 - pZone.uses/PZONE_MAX_USES)){
-      // aucun plot : tir de harcèlement sur la zone de déploiement supposée
-      const a = rng()*6.283, d = Math.sqrt(rng())*pZone.r;
-      pZone.uses++;
-      order = { type:'fire', at: { x: pZone.x + Math.cos(a)*d, y: pZone.y + Math.sin(a)*d }, harass:true };
-    } else if (e.threat >= AI_THREAT_MOVE){
-      order = { type:'move', to: pickSpot(e) };
-    } else if (rng() < AI_RESTLESS_P){
-      order = { type:'move', to: pickSpot(e) };
-    } else {
-      order = { type:'hold' };
-    }
-    eOrders.push(order);
-  }
-}
-function pickSpot(e){
-  ({ dist: aiDist, prev: aiPrev } = computeReach(ter, elev, e.x, e.y, MOVE_GUN));
-  const cand = [];
-  for (let cy=0;cy<ROWS;cy++) for (let cx=0;cx<COLS;cx++){
-    const i = ei(cx,cy);
-    if (aiDist[i] > MOVE_GUN || aiDist[i] < AI_MIN_MOVE) continue;
-    if (cx*CELL < AI_KEEP_X) continue;
-    cand.push(i);
-  }
-  if (!cand.length) return { x:e.x, y:e.y };
-  const plots = livePlots();
-  let best = { x:e.x, y:e.y }, bs = -1e9;
-  for (let k = 0; k < AI_SAMPLES; k++){
-    const i = cand[(rng()*cand.length)|0];
-    const x = (i%COLS)*CELL + CELL/2, y = ((i/COLS)|0)*CELL + CELL/2;
-    const t = ter[i];
-    let s = rng()*SCORE_JITTER;
-    if (!observed(x,y)) s += SCORE_UNSEEN;
-    if (t === T_WOOD) s += SCORE_WOOD;          // le couvert vaut mieux qu'un simple masque de crête
-    if (t === T_MARSH) s -= SCORE_MARSH;        // on n'installe pas une pièce dans un marécage
-    if (t === T_ROAD) s -= SCORE_ROAD;          // trop exposé pour rester
-    if (plots.length) s += plots.some(o => Math.hypot(x-o.p.x, y-o.p.y) < E_RANGE) ? SCORE_IN_RANGE : -SCORE_OUT_RANGE;
-    s += elevPx(x,y)*SCORE_ELEV_W + aiDist[i]*SCORE_DIST_W;
-    for (const o of enemies) if (o !== e && o.alive && Math.hypot(x-o.x, y-o.y) < AI_SPACING) s -= SCORE_SPACING_PEN;
-    if (s > bs){ bs = s; best = { x, y }; }
-  }
-  return best;
+  const r = planAIRule(enemies, guns, pZone, { ter, elev, vis, drones, guns, enemies }, rng);
+  eOrders = r.orders;
+  if (pZone) pZone.uses = r.pZoneUses;
 }
 
 /* ---------------- exécution ---------------- */
