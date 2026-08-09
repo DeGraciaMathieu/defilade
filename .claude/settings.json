@@ -1,0 +1,23 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/run-tests.sh\"",
+            "timeout": 120,
+            "statusMessage": "Lancement des tests…"
+          },
+          {
+            "type": "agent",
+            "prompt": "Tu es le vérificateur de cohérence documentaire de CONTRE-BATTERIE. La documentation vivante se trouve dans index.html : (1) le panneau « Terrain » (les lignes <tr> décrivant Découvert / Bois / Route / Marais / Rocaille et leurs effets), qui doit rester fidèle au tableau TER de src/config.js (champs cost, blast, los) ; (2) le bloc d'aide « .hint » décrivant les raccourcis clavier (1 2 3 pièce, 4 observateur, F M S ordre, A Z E R T munition, Espace, N), qui doit rester fidèle à src/input/input.js et aux touches key de AMMO dans src/config.js. Ignore entièrement les valeurs rendues dynamiquement : le stock affiché (∞ et compteurs), les compteurs de tour, les identifiants d'unités, le journal — rien de tout cela n'est de la doc figée. Seule la prose et les tables écrites à la main comptent. Exécute : git diff HEAD -- src/config.js src/input/input.js index.html. Si rien de pertinent n'a changé, ou si la documentation décrit toujours fidèlement le code, réponds exactement : accept. Sinon réponds : block, puis liste chaque passage périmé — cite-le, donne sa localisation, et indique la correction que le code impose désormais. Ne réécris pas la documentation toi-même et ne signale pas de points de style.",
+            "model": "claude-sonnet-4-6",
+            "timeout": 120,
+            "statusMessage": "Vérification de la synchro documentaire…"
+          }
+        ]
+      }
+    ]
+  }
+}
