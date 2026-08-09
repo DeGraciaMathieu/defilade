@@ -155,7 +155,7 @@ import {
   MOVE_BIAS, DRONE_TURNS,
   THREAT_MAX, GUN_HP,
   OBSERVE_NEAR, OBSERVE_GOOD,
-  SETTLE_TICKS, VIS_RECALC_PERIOD, THREAT_DECAY, PLOT_STALE_AGE,
+  SETTLE_TICKS, VIS_RECALC_PERIOD,
   GUN_X_MIN, GUN_X_SPAN, GUN_Y_TOP, GUN_Y_STEP, GUN_Y_JITTER, FO_DX,
   PZONE_JX, PZONE_JY, PZONE_R,
   ENEMY_X_MIN, ENEMY_X_SPAN, ENEMY_Y_TOP, ENEMY_Y_STEP, ENEMY_Y_JITTER,
@@ -170,6 +170,7 @@ import { accumulateSignature, locationPlot, soundPlot } from './src/rules/signat
 import { fireShell, guidedSnap, icmSubs, enemySalvo } from './src/rules/fire.js';
 import { resolveImpact } from './src/rules/impact.js';
 import { planAI as planAIRule } from './src/rules/ai.js';
+import { agedPlot, decayedThreat, tickDrones, missionOutcome } from './src/rules/turn.js';
 
 /* graine décidée ici (à terme dans main.js) ; le code de règles ne touche jamais Math.random */
 let rng = createRng((Math.random()*4294967296)>>>0);
@@ -186,7 +187,6 @@ const vis = new Uint8Array(COLS*ROWS);
 const ei = (cx,cy) => cy*COLS + cx;
 
 let stock = {};
-const lethal = () => stock.he > 0 || stock.icm > 0 || stock.gui > 0;
 
 let phase = 'plan', rt = 0, settle = 0, turn = 1, sel = 0, otype = 'fire', ammo = 'reg';
 let banner = null, mouse = { x:-1, y:-1 };
@@ -636,17 +636,14 @@ function observe(ix, iy, g){
 
 function endTurn(){
   turn++;
-  for (let i = drones.length-1; i >= 0; i--)
-    if (--drones[i].turns <= 0){ drones.splice(i,1); bakeFog(); log('Drone en fin d\'autonomie.','dim'); }
-  for (const g of guns) if (g.ePlot && g.ePlot.stale && ++g.ePlot.age >= PLOT_STALE_AGE) g.ePlot = null;
-  for (const e of enemies) e.threat = Math.max(0, e.threat - THREAT_DECAY);
+  const dr = tickDrones(drones);
+  drones = dr.drones;
+  if (dr.expired){ bakeFog(); for (let i = 0; i < dr.expired; i++) log('Drone en fin d\'autonomie.','dim'); }
+  for (const g of guns) g.ePlot = agedPlot(g.ePlot);
+  for (const e of enemies) e.threat = decayedThreat(e.threat);
   computeVis(); trackEnemies();
-  if (guns.every(g => !g.alive))
-    return over('GROUPE DÉTRUIT', 'Plus une pièce en batterie — N pour rejouer', '#c8382a');
-  if (enemies.every(e => !e.alive))
-    return over('MISSION REMPLIE', 'Les trois batteries sont neutralisées — N pour rejouer', '#d9662b');
-  if (!lethal())
-    return over('À COURT DE MUNITIONS', 'Plus rien pour détruire un objectif — N pour rejouer', '#c8382a');
+  const out = missionOutcome(guns, enemies, stock);
+  if (out) return over(out.t1, out.t2, out.c);
   for (const g of guns) g.order = null;
   fo.order = null;
   planAI();
