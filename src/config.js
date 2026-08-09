@@ -89,7 +89,10 @@ export const SALVO_SPREAD = 55;          // dispersion d'une salve (px)
 
 /* --- impacts --- */
 export const FRAG_R = 32;                // rayon d'éclats sur nos pièces, modulé par le terrain
-export const FRAG_KILL_R = 15;           // rayon de dommage grave (-2 HP)
+export const FRAG_KILL_R = 15;           // rayon de dommage grave
+export const FRAG_KILL_DMG = 2;          // HP retirés dans le rayon de dommage grave
+export const FRAG_DMG = 1;               // HP retirés par des éclats plus lointains
+export const SPOT_TICKS = 20;            // durée de révélation d'une batterie après un impact proche
 export const THREAT_R = 220;             // un impact plus près que ça augmente la menace
 export const THREAT_MAX = 4;
 export const GUN_HP = 2;

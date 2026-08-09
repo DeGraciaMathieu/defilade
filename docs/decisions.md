@@ -105,6 +105,13 @@ game. Each entry: what it is, where, and why it was not fixed.
   identique.
 - `guns[sel]` / sélection : la logique de repli de sélection en fin de tour
   (`sel = findIndex(alive)`) est inchangée.
+- Coefficients d'animation dans `loop.step` (amortissement des particules `.93 / .84 / .9`,
+  croissance de poussière `.42`, décroissance des anneaux `.022 / .05`, des feux, des flashs
+  `.2 / 1.1`, du shake/blast/punch `.86 / .8 / .84`). Ce sont des facteurs cosmétiques
+  d'intégration frame-à-frame, du même ordre que les `Math.random` laissés dans `render/`.
+  Laissés inline dans `loop/` plutôt que nommés en config : les extraire n'améliore pas la
+  testabilité (aucune règle n'en dépend) et gonflerait la config d'une vingtaine de
+  constantes purement visuelles. Classés cosmétiques, délibérément non extraits.
 
 ## Open questions
 
