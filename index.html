@@ -147,15 +147,13 @@
 <script type="module">
 import {
   W, H, CELL, COLS, ROWS, MPP,
-  MAXRANGE, E_RANGE, VIS_R, WOOD_VIS_R, DRONE_R, SIG_PLOT,
+  MAXRANGE, E_RANGE, VIS_R, WOOD_VIS_R, DRONE_R,
   T_OPEN, T_WOOD, T_ROAD, T_MARSH, T_ROCK, TER,
   HILL_COUNT, MARSH_BELOW, MARSH_P, ROCK_ABOVE, ROCK_P, GROVE_COUNT,
   MOVE_GUN, MOVE_OBS, MOVE_TICKS,
   AMMO, ORDER,
   FLIGHT_BASE, FLIGHT_PER_PX, AIM_NOISE_GUIDED, AIM_NOISE_UNGUIDED, MOVE_BIAS,
   GUIDED_SNAP_R, GUIDED_SNAP_NOISE, ICM_SUB_STAGGER, DRONE_TURNS,
-  SIG_SAME_POS, PLOT_ERR_BASE, PLOT_ERR_MIN, PLOT_ERR_MAX,
-  SOUND_ERR_INIT, SOUND_ERR_IMPROVE, SOUND_ERR_MIN, SOUND_SAME_POS, SOUND_SCATTER,
   E_FLIGHT_BASE, SALVO_SIZE, SALVO_STAGGER, SALVO_SPREAD,
   FRAG_R, FRAG_KILL_R, THREAT_R, THREAT_MAX, GUN_HP,
   OBSERVE_NEAR, OBSERVE_GOOD,
@@ -175,6 +173,7 @@ import { createRng } from './src/rules/rng.js';
 import { losClear as losRule, observed as observedRule } from './src/rules/los.js';
 import { computeReach, pathTo } from './src/rules/reach.js';
 import { blockReason as blockReasonRule } from './src/rules/orders.js';
+import { accumulateSignature, locationPlot, soundPlot } from './src/rules/signature.js';
 
 /* graine décidée ici (à terme dans main.js) ; le code de règles ne touche jamais Math.random */
 let rng = createRng((Math.random()*4294967296)>>>0);
@@ -642,13 +641,9 @@ function execute(){
     const R = Math.hypot(ix-g.x, iy-g.y);
     shells.push({ x0:g.x, y0:g.y, tx:ix, ty:iy, t:0, dur:FLIGHT_BASE+R*FLIGHT_PER_PX, side:'us', type:o.ammo, gun:g });
     firedAny = true;
-    if (g.sigPos && Math.hypot(g.x-g.sigPos.x, g.y-g.sigPos.y) < SIG_SAME_POS) g.sig += A.sig;
-    else { g.sigPos = { x:g.x, y:g.y }; g.sig = A.sig; }
-    if (g.sig >= SIG_PLOT){
-      const err = clamp(PLOT_ERR_BASE/g.sig, PLOT_ERR_MIN, PLOT_ERR_MAX);
-      const a = rng()*6.283, d = rng()*err;
-      g.ePlot = { x:g.x+Math.cos(a)*d, y:g.y+Math.sin(a)*d, err, stale:false, age:0 };
-    }
+    ({ sig: g.sig, sigPos: g.sigPos } = accumulateSignature(g.sig, g.sigPos, g.x, g.y, A.sig));
+    const plot = locationPlot(g.x, g.y, g.sig, rng);
+    if (plot) g.ePlot = plot;
   }
   if (firedAny) muzzle(false);
 
@@ -682,11 +677,8 @@ function execute(){
   refresh();
 }
 function soundRange(e){
-  const prev = e.plot && Math.hypot(e.plot.src.x-e.x, e.plot.src.y-e.y) < SOUND_SAME_POS ? e.plot : null;
-  const err = prev ? Math.max(SOUND_ERR_MIN, prev.err-SOUND_ERR_IMPROVE) : SOUND_ERR_INIT;
-  const a = rng()*6.283, d = rng()*err*SOUND_SCATTER;
-  e.plot = { x:e.x+Math.cos(a)*d, y:e.y+Math.sin(a)*d, err, src:{ x:e.x, y:e.y } };
-  log('Départ entendu — plot à ' + Math.round(err*MPP/10)*10 + ' m près.', 'warn');
+  e.plot = soundPlot(e.plot, e.x, e.y, rng);
+  log('Départ entendu — plot à ' + Math.round(e.plot.err*MPP/10)*10 + ' m près.', 'warn');
 }
 
 function impactAt(x, y, A, side){
