@@ -153,7 +153,7 @@ import {
   MOVE_GUN, MOVE_OBS, MOVE_TICKS,
   AMMO, ORDER,
   MOVE_BIAS, DRONE_TURNS,
-  FRAG_R, FRAG_KILL_R, THREAT_R, THREAT_MAX, GUN_HP,
+  THREAT_MAX, GUN_HP,
   OBSERVE_NEAR, OBSERVE_GOOD,
   SETTLE_TICKS, VIS_RECALC_PERIOD, THREAT_DECAY, PLOT_STALE_AGE,
   AI_PICK_BEST_P, AI_STALE_FIRE_P, AI_THREAT_FLINCH, AI_FLINCH_MOVE_P,
@@ -173,6 +173,7 @@ import { computeReach, pathTo } from './src/rules/reach.js';
 import { blockReason as blockReasonRule } from './src/rules/orders.js';
 import { accumulateSignature, locationPlot, soundPlot } from './src/rules/signature.js';
 import { fireShell, guidedSnap, icmSubs, enemySalvo } from './src/rules/fire.js';
+import { resolveImpact } from './src/rules/impact.js';
 
 /* graine décidée ici (à terme dans main.js) ; le code de règles ne touche jamais Math.random */
 let rng = createRng((Math.random()*4294967296)>>>0);
@@ -674,30 +675,14 @@ function soundRange(e){
 
 function impactAt(x, y, A, side){
   if (A.power > 0) explode(x, y, A.power, side === 'them');
-  if (side === 'them'){
-    const b2 = TER[ter[ei(clamp(Math.floor(x/CELL),0,COLS-1), clamp(Math.floor(y/CELL),0,ROWS-1))]].blast;
-    for (const g of guns){
-      if (!g.alive) continue;
-      const d = Math.hypot(x-g.x, y-g.y);
-      if (d < FRAG_R*b2){
-        g.hp -= d < FRAG_KILL_R*b2 ? 2 : 1;
-        if (g.hp <= 0){ g.alive = false; log('PIÈCE ' + g.id + ' DÉTRUITE.', 'warn'); }
-        else log('Éclats sur la pièce ' + g.id + '.', 'warn');
-      }
-    }
-    return;
+  const r = resolveImpact(x, y, A, side, ter, guns, enemies, turn);
+  for (const h of r.gunHits){ const g = guns[h.i]; g.hp = h.hp; g.alive = h.alive; }
+  for (const h of r.enemyHits){ const e = enemies[h.i];
+    if (h.threat !== undefined) e.threat = h.threat;
+    if (h.lk){ e.lk = h.lk; e.spot = h.spot; }
+    if (h.killed){ e.alive = false; e.seen = false; }
   }
-  const bl = TER[ter[ei(clamp(Math.floor(x/CELL),0,COLS-1), clamp(Math.floor(y/CELL),0,ROWS-1))]].blast;
-  for (const e of enemies){
-    if (!e.alive) continue;
-    const d = Math.hypot(x-e.x, y-e.y);
-    if (d < THREAT_R) e.threat = Math.min(THREAT_MAX, e.threat + (A.thr === undefined ? 1 : A.thr));
-    if (d < A.reveal){ e.lk = { x:e.x, y:e.y, t:turn }; e.spot = 20; }
-    if (A.kill && d < A.kill*bl){
-      e.alive = false; e.seen = false;
-      log('OBJECTIF DÉTRUIT — batterie neutralisée.', 'hit');
-    }
-  }
+  for (const ev of r.events) log(ev.msg, ev.cls);
 }
 function observe(ix, iy, g){
   const seen = observed(ix, iy);
