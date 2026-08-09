@@ -150,7 +150,7 @@ import {
   MAXRANGE, E_RANGE, VIS_R, WOOD_VIS_R, DRONE_R, SIG_PLOT,
   T_OPEN, T_WOOD, T_ROAD, T_MARSH, T_ROCK, TER,
   HILL_COUNT, MARSH_BELOW, MARSH_P, ROCK_ABOVE, ROCK_P, GROVE_COUNT,
-  MOVE_GUN, MOVE_OBS, DIAG_COST, CLIMB_COST, NO_DEPLOY_ROWS, MOVE_TICKS,
+  MOVE_GUN, MOVE_OBS, MOVE_TICKS,
   AMMO, ORDER,
   FLIGHT_BASE, FLIGHT_PER_PX, AIM_NOISE_GUIDED, AIM_NOISE_UNGUIDED, MOVE_BIAS,
   GUIDED_SNAP_R, GUIDED_SNAP_NOISE, ICM_SUB_STAGGER, DRONE_TURNS,
@@ -173,6 +173,7 @@ import {
 } from './src/config.js';
 import { createRng } from './src/rules/rng.js';
 import { losClear as losRule, observed as observedRule } from './src/rules/los.js';
+import { computeReach, pathTo } from './src/rules/reach.js';
 
 /* graine décidée ici (à terme dans main.js) ; le code de règles ne touche jamais Math.random */
 let rng = createRng((Math.random()*4294967296)>>>0);
@@ -394,56 +395,8 @@ function computeVis(){
   bakeFog();
 }
 /* déplacement : le terrain se paie en points de mouvement, pas en distance à vol d'oiseau */
-const uiDist = new Float32Array(COLS*ROWS), uiPrev = new Int32Array(COLS*ROWS);
-const aiDist = new Float32Array(COLS*ROWS), aiPrev = new Int32Array(COLS*ROWS);
-function reachInto(px, py, budget, dist, prev){
-  dist.fill(Infinity); prev.fill(-1);
-  const s = ei(clamp(Math.floor(px/CELL),0,COLS-1), clamp(Math.floor(py/CELL),0,ROWS-1));
-  dist[s] = 0;
-  const hq = [s], hk = [0];
-  const push = (k,v) => {
-    let i = hq.length; hq.push(v); hk.push(k);
-    while (i > 0){ const p = (i-1)>>1; if (hk[p] <= hk[i]) break;
-      let t = hk[p]; hk[p] = hk[i]; hk[i] = t; t = hq[p]; hq[p] = hq[i]; hq[i] = t; i = p; }
-  };
-  const pop = () => {
-    const top = hq[0], lv = hq.pop(), lk = hk.pop();
-    if (hq.length){ hq[0] = lv; hk[0] = lk; let i = 0;
-      for(;;){ const l = 2*i+1, r = l+1; let m = i;
-        if (l < hq.length && hk[l] < hk[m]) m = l;
-        if (r < hq.length && hk[r] < hk[m]) m = r;
-        if (m === i) break;
-        let t = hk[m]; hk[m] = hk[i]; hk[i] = t; t = hq[m]; hq[m] = hq[i]; hq[i] = t; i = m; } }
-    return top;
-  };
-  while (hq.length){
-    const c = pop(), cd = dist[c];
-    if (cd > budget) continue;
-    const cx = c % COLS, cy = (c / COLS) | 0;
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){
-      if (!dx && !dy) continue;
-      const nx = cx+dx, ny = cy+dy;
-      if (nx < 0 || ny < NO_DEPLOY_ROWS || nx >= COLS || ny >= ROWS) continue;   // sous le bandeau, on ne s'installe pas
-      const ni = ei(nx,ny);
-      const step = (dx && dy ? DIAG_COST : 1) * (TER[ter[c]].cost + TER[ter[ni]].cost) / 2
-                 + Math.max(0, elev[ni] - elev[c]) * CLIMB_COST;
-      const nd = cd + step;
-      if (nd < dist[ni] && nd <= budget){ dist[ni] = nd; prev[ni] = c; push(nd, ni); }
-    }
-  }
-}
-function pathTo(px, py, tx, ty, prev){
-  let c = ei(clamp(Math.floor(tx/CELL),0,COLS-1), clamp(Math.floor(ty/CELL),0,ROWS-1));
-  const cells = [];
-  let guard = 0;
-  while (c >= 0 && guard++ < 4000){ cells.push(c); c = prev[c]; }
-  cells.reverse();
-  const pts = [{ x:px, y:py }];
-  for (let i = 1; i < cells.length; i++)
-    pts.push({ x:(cells[i]%COLS)*CELL + CELL/2, y:((cells[i]/COLS)|0)*CELL + CELL/2 });
-  pts.push({ x:tx, y:ty });
-  return pts;
-}
+let uiDist = new Float32Array(COLS*ROWS), uiPrev = new Int32Array(COLS*ROWS);
+let aiDist = new Float32Array(COLS*ROWS), aiPrev = new Int32Array(COLS*ROWS);
 function mkMove(path, d){
   const seg = []; let total = 0;
   for (let i = 1; i < path.length; i++){
@@ -632,7 +585,7 @@ function planAI(){
   }
 }
 function pickSpot(e){
-  reachInto(e.x, e.y, MOVE_GUN, aiDist, aiPrev);
+  ({ dist: aiDist, prev: aiPrev } = computeReach(ter, elev, e.x, e.y, MOVE_GUN));
   const cand = [];
   for (let cy=0;cy<ROWS;cy++) for (let cx=0;cx<COLS;cx++){
     const i = ei(cx,cy);
@@ -724,7 +677,7 @@ function execute(){
     const eo = eOrders[i];
     if (!e.alive || !eo) return;
     if (eo.type === 'move'){
-      reachInto(e.x, e.y, MOVE_GUN, aiDist, aiPrev);
+      ({ dist: aiDist, prev: aiPrev } = computeReach(ter, elev, e.x, e.y, MOVE_GUN));
       e.mv = mkMove(pathTo(e.x, e.y, eo.to.x, eo.to.y, aiPrev), MOVE_TICKS);
       e.threat = 0;
       if (e.seen) log('Mouvement observé : une batterie décroche.', 'blue');
@@ -1306,7 +1259,7 @@ function bakeReach(){
   reachOn = false;
   const u = selUnit();
   if (phase !== 'plan' || otype !== 'move' || !u) return;
-  reachInto(u.x, u.y, budgetOf(u), uiDist, uiPrev);
+  ({ dist: uiDist, prev: uiPrev } = computeReach(ter, elev, u.x, u.y, budgetOf(u)));
   const b = budgetOf(u);
   for (let cy=0;cy<ROWS;cy++) for (let cx=0;cx<COLS;cx++){
     const d = uiDist[ei(cx,cy)];
