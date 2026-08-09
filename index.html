@@ -144,44 +144,46 @@
   </div>
 </div>
 
-<script>
-(() => {
-"use strict";
+<script type="module">
+import {
+  W, H, CELL, COLS, ROWS, MPP,
+  MAXRANGE, E_RANGE, VIS_R, WOOD_VIS_R, DRONE_R, SIG_PLOT,
+  T_OPEN, T_WOOD, T_ROAD, T_MARSH, T_ROCK, TER,
+  HILL_COUNT, MARSH_BELOW, MARSH_P, ROCK_ABOVE, ROCK_P, GROVE_COUNT,
+  LOS_EYE_H, LOS_TGT_H, LOS_CLEARANCE,
+  MOVE_GUN, MOVE_OBS, DIAG_COST, CLIMB_COST, NO_DEPLOY_ROWS, MOVE_TICKS,
+  AMMO, ORDER,
+  FLIGHT_BASE, FLIGHT_PER_PX, AIM_NOISE_GUIDED, AIM_NOISE_UNGUIDED, MOVE_BIAS,
+  GUIDED_SNAP_R, GUIDED_SNAP_NOISE, ICM_SUB_STAGGER, DRONE_TURNS,
+  SIG_SAME_POS, PLOT_ERR_BASE, PLOT_ERR_MIN, PLOT_ERR_MAX,
+  SOUND_ERR_INIT, SOUND_ERR_IMPROVE, SOUND_ERR_MIN, SOUND_SAME_POS, SOUND_SCATTER,
+  E_FLIGHT_BASE, SALVO_SIZE, SALVO_STAGGER, SALVO_SPREAD,
+  FRAG_R, FRAG_KILL_R, THREAT_R, THREAT_MAX, GUN_HP,
+  OBSERVE_NEAR, OBSERVE_GOOD,
+  SETTLE_TICKS, VIS_RECALC_PERIOD, THREAT_DECAY, PLOT_STALE_AGE,
+  AI_PICK_BEST_P, AI_STALE_FIRE_P, AI_THREAT_FLINCH, AI_FLINCH_MOVE_P,
+  AI_THREAT_MOVE, AI_RESTLESS_P, AI_HARASS_P, PZONE_MAX_USES,
+  AI_SAMPLES, AI_MIN_MOVE, AI_KEEP_X, AI_SPACING,
+  SCORE_JITTER, SCORE_UNSEEN, SCORE_WOOD, SCORE_MARSH, SCORE_ROAD,
+  SCORE_IN_RANGE, SCORE_OUT_RANGE, SCORE_ELEV_W, SCORE_DIST_W, SCORE_SPACING_PEN,
+  GUN_X_MIN, GUN_X_SPAN, GUN_Y_TOP, GUN_Y_STEP, GUN_Y_JITTER, FO_DX,
+  PZONE_JX, PZONE_JY, PZONE_R,
+  ENEMY_X_MIN, ENEMY_X_SPAN, ENEMY_Y_TOP, ENEMY_Y_STEP, ENEMY_Y_JITTER,
+  ZONE_JITTER, ZONE_R_MIN, ZONE_R_SPAN,
+  MAX_PARTS
+} from './src/config.js';
+
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
-const W = 1040, H = 620, CELL = 20, COLS = W / CELL, ROWS = H / CELL;
-const MPP = 5, MAXRANGE = 880, E_RANGE = 820, VIS_R = 21, DRONE_R = 95, SIG_MAX = 2, SIG_PLOT = 1;
 const $ = id => document.getElementById(id);
 const clamp = (v,a,b) => v<a?a:v>b?b:v;
 const lerp = (a,b,t) => a + (b-a)*t;
 
-const T_OPEN=0, T_WOOD=1, T_ROAD=2, T_MARSH=3, T_ROCK=4;
-const TER = [
-  { n:'Découvert', cost:1,   blast:1,    los:true,  c:'' },
-  { n:'Bois',      cost:1.8, blast:.85,  los:false, c:'#1b2a18' },
-  { n:'Route',     cost:.5,  blast:1.15, los:true,  c:'#6b5c3a' },
-  { n:'Marais',    cost:2.5, blast:.55,  los:true,  c:'#243028' },
-  { n:'Rocaille',  cost:1.4, blast:1.35, los:true,  c:'#3d3f33' }
-];
-const MOVE_GUN = 9, MOVE_OBS = 13;
 const ter = new Uint8Array(COLS*ROWS);
 let roads = [];
 const elev = new Float32Array(COLS*ROWS);
 const vis = new Uint8Array(COLS*ROWS);
 const ei = (cx,cy) => cy*COLS + cx;
 
-const AMMO = {
-  reg: { key:'A', name:'Réglage', start:Infinity, thr:.5, sig:.5, power:.45, kill:0, reveal:26,
-    desc:'Charge réduite. Ne détruit rien, demi-signature.' },
-  he:  { key:'Z', name:'Explosif', start:20, thr:1, sig:1, power:1, kill:22, reveal:44,
-    desc:'La munition d\'effet. Signature pleine.' },
-  icm: { key:'E', name:'Bombelettes', start:6, thr:.16, sig:1.4, power:.55, kill:15, reveal:28,
-    spread:74, subs:7, desc:'Sept sous-munitions. Couvre une batterie qui décroche.' },
-  gui: { key:'R', name:'Guidé', start:3, thr:1, sig:1, power:1.15, kill:26, reveal:50,
-    desc:'Se recale en vol sur un objectif observé.' },
-  rec: { key:'T', name:'Obus-drone', start:4, thr:0, sig:.5, power:0, kill:0, reveal:0,
-    desc:'Drone en station trois tours. Ouvre le terrain mort.' }
-};
-const ORDER = ['reg','he','icm','gui','rec'];
 let stock = {};
 const lethal = () => stock.he > 0 || stock.icm > 0 || stock.gui > 0;
 
@@ -313,7 +315,6 @@ const SPR = {
     sprite(64, [[0,'rgba(72,68,54,1)'],[.55,'rgba(72,68,54,.6)'],[1,'rgba(72,68,54,0)']])
   ]
 };
-const MAX_PARTS = 700;
 function trim(){
   if (parts.length <= MAX_PARTS) return;
   let over = parts.length - MAX_PARTS;
@@ -326,7 +327,7 @@ function trim(){
 /* ---------------- terrain ---------------- */
 function genElev(){
   const s = Math.random()*100, hills = [];
-  for (let i = 0; i < 11; i++)
+  for (let i = 0; i < HILL_COUNT; i++)
     hills.push({ x:Math.random()*COLS, y:Math.random()*ROWS, r:4+Math.random()*9, h:22+Math.random()*54 });
   for (let cy = 0; cy < ROWS; cy++) for (let cx = 0; cx < COLS; cx++){
     let h = 24 + Math.sin(cx*.21+s)*8 + Math.sin(cy*.27+s*1.3)*7 + Math.sin((cx+cy)*.13+s*.6)*6;
@@ -344,11 +345,11 @@ function genTerrainTypes(){
   // les creux se noient, les sommets se dénudent
   for (let cy=0;cy<ROWS;cy++) for (let cx=0;cx<COLS;cx++){
     const h = elev[ei(cx,cy)];
-    if (h < 13 && Math.random() < .75) ter[ei(cx,cy)] = T_MARSH;
-    else if (h > 60 && Math.random() < .65) ter[ei(cx,cy)] = T_ROCK;
+    if (h < MARSH_BELOW && Math.random() < MARSH_P) ter[ei(cx,cy)] = T_MARSH;
+    else if (h > ROCK_ABOVE && Math.random() < ROCK_P) ter[ei(cx,cy)] = T_ROCK;
   }
   // bosquets
-  for (let b = 0; b < 10; b++){
+  for (let b = 0; b < GROVE_COUNT; b++){
     const bx = Math.random()*COLS, by = Math.random()*ROWS, br = 2 + Math.random()*4;
     for (let cy=Math.max(0,(by-br)|0); cy<Math.min(ROWS,by+br+1); cy++)
       for (let cx=Math.max(0,(bx-br)|0); cx<Math.min(COLS,bx+br+1); cx++){
@@ -383,7 +384,7 @@ function genTerrainTypes(){
 const elevPx = (x,y) => elev[ei(clamp(Math.floor(x/CELL),0,COLS-1), clamp(Math.floor(y/CELL),0,ROWS-1))];
 function losClear(ox,oy,tx,ty){
   if (ter[ei(tx,ty)] === T_WOOD) return false;      // ce qui est sous le couvert ne se voit pas
-  const hO = elev[ei(ox,oy)]+10, hT = elev[ei(tx,ty)]+3;
+  const hO = elev[ei(ox,oy)]+LOS_EYE_H, hT = elev[ei(tx,ty)]+LOS_TGT_H;
   const n = Math.ceil(Math.hypot(tx-ox, ty-oy));
   if (n < 2) return true;
   for (let i = 1; i < n; i++){
@@ -391,13 +392,13 @@ function losClear(ox,oy,tx,ty){
     const cx = Math.round(ox+(tx-ox)*t), cy = Math.round(oy+(ty-oy)*t);
     const k = ei(cx,cy);
     if (ter[k] === T_WOOD) return false;
-    if (elev[k] > hO+(hT-hO)*t+2) return false;
+    if (elev[k] > hO+(hT-hO)*t+LOS_CLEARANCE) return false;
   }
   return true;
 }
 function computeVis(){
   const ox = clamp(Math.floor(fo.x/CELL),0,COLS-1), oy = clamp(Math.floor(fo.y/CELL),0,ROWS-1);
-  const range = ter[ei(ox,oy)] === T_WOOD ? 5 : VIS_R;   // sous couvert, on ne voit rien venir
+  const range = ter[ei(ox,oy)] === T_WOOD ? WOOD_VIS_R : VIS_R;   // sous couvert, on ne voit rien venir
   for (let cy = 0; cy < ROWS; cy++) for (let cx = 0; cx < COLS; cx++)
     vis[ei(cx,cy)] = (Math.hypot(cx-ox, cy-oy) <= range && losClear(ox,oy,cx,cy)) ? 1 : 0;
   bakeFog();
@@ -432,10 +433,10 @@ function reachInto(px, py, budget, dist, prev){
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){
       if (!dx && !dy) continue;
       const nx = cx+dx, ny = cy+dy;
-      if (nx < 0 || ny < 2 || nx >= COLS || ny >= ROWS) continue;   // sous le bandeau, on ne s'installe pas
+      if (nx < 0 || ny < NO_DEPLOY_ROWS || nx >= COLS || ny >= ROWS) continue;   // sous le bandeau, on ne s'installe pas
       const ni = ei(nx,ny);
-      const step = (dx && dy ? 1.414 : 1) * (TER[ter[c]].cost + TER[ter[ni]].cost) / 2
-                 + Math.max(0, elev[ni] - elev[c]) * .014;
+      const step = (dx && dy ? DIAG_COST : 1) * (TER[ter[c]].cost + TER[ter[ni]].cost) / 2
+                 + Math.max(0, elev[ni] - elev[c]) * CLIMB_COST;
       const nd = cd + step;
       if (nd < dist[ni] && nd <= budget){ dist[ni] = nd; prev[ni] = c; push(nd, ni); }
     }
@@ -625,23 +626,23 @@ function planAI(){
     let target = null;
     if (fresh.length){
       fresh.sort((a,b) => a.p.err - b.p.err);
-      target = fresh[Math.random() < .7 ? 0 : Math.floor(Math.random()*fresh.length)];
-    } else if (reach.length && Math.random() < .35){
+      target = fresh[Math.random() < AI_PICK_BEST_P ? 0 : Math.floor(Math.random()*fresh.length)];
+    } else if (reach.length && Math.random() < AI_STALE_FIRE_P){
       target = reach[Math.floor(Math.random()*reach.length)];   // ils tirent sur une position abandonnée
     }
     let order = null;
     if (target){
       // sous la menace, elle hésite entre décrocher et placer un coup de plus
-      if (e.threat >= 2.5 && Math.random() < .45) order = { type:'move', to: pickSpot(e) };
+      if (e.threat >= AI_THREAT_FLINCH && Math.random() < AI_FLINCH_MOVE_P) order = { type:'move', to: pickSpot(e) };
       else order = { type:'fire', at: { x: target.p.x, y: target.p.y } };
-    } else if (pZone && pZone.uses < 5 && Math.random() < .34 * (1 - pZone.uses/5)){
+    } else if (pZone && pZone.uses < PZONE_MAX_USES && Math.random() < AI_HARASS_P * (1 - pZone.uses/PZONE_MAX_USES)){
       // aucun plot : tir de harcèlement sur la zone de déploiement supposée
       const a = Math.random()*6.283, d = Math.sqrt(Math.random())*pZone.r;
       pZone.uses++;
       order = { type:'fire', at: { x: pZone.x + Math.cos(a)*d, y: pZone.y + Math.sin(a)*d }, harass:true };
-    } else if (e.threat >= 2){
+    } else if (e.threat >= AI_THREAT_MOVE){
       order = { type:'move', to: pickSpot(e) };
-    } else if (Math.random() < .16){
+    } else if (Math.random() < AI_RESTLESS_P){
       order = { type:'move', to: pickSpot(e) };
     } else {
       order = { type:'hold' };
@@ -654,25 +655,25 @@ function pickSpot(e){
   const cand = [];
   for (let cy=0;cy<ROWS;cy++) for (let cx=0;cx<COLS;cx++){
     const i = ei(cx,cy);
-    if (aiDist[i] > MOVE_GUN || aiDist[i] < 2) continue;
-    if (cx*CELL < 400) continue;
+    if (aiDist[i] > MOVE_GUN || aiDist[i] < AI_MIN_MOVE) continue;
+    if (cx*CELL < AI_KEEP_X) continue;
     cand.push(i);
   }
   if (!cand.length) return { x:e.x, y:e.y };
   const plots = livePlots();
   let best = { x:e.x, y:e.y }, bs = -1e9;
-  for (let k = 0; k < 42; k++){
+  for (let k = 0; k < AI_SAMPLES; k++){
     const i = cand[(Math.random()*cand.length)|0];
     const x = (i%COLS)*CELL + CELL/2, y = ((i/COLS)|0)*CELL + CELL/2;
     const t = ter[i];
-    let s = Math.random()*10;
-    if (!observed(x,y)) s += 45;
-    if (t === T_WOOD) s += 30;          // le couvert vaut mieux qu'un simple masque de crête
-    if (t === T_MARSH) s -= 35;         // on n'installe pas une pièce dans un marécage
-    if (t === T_ROAD) s -= 15;          // trop exposé pour rester
-    if (plots.length) s += plots.some(o => Math.hypot(x-o.p.x, y-o.p.y) < E_RANGE) ? 30 : -70;
-    s += elevPx(x,y)*.1 + aiDist[i]*2.5;
-    for (const o of enemies) if (o !== e && o.alive && Math.hypot(x-o.x, y-o.y) < 90) s -= 25;
+    let s = Math.random()*SCORE_JITTER;
+    if (!observed(x,y)) s += SCORE_UNSEEN;
+    if (t === T_WOOD) s += SCORE_WOOD;          // le couvert vaut mieux qu'un simple masque de crête
+    if (t === T_MARSH) s -= SCORE_MARSH;        // on n'installe pas une pièce dans un marécage
+    if (t === T_ROAD) s -= SCORE_ROAD;          // trop exposé pour rester
+    if (plots.length) s += plots.some(o => Math.hypot(x-o.p.x, y-o.p.y) < E_RANGE) ? SCORE_IN_RANGE : -SCORE_OUT_RANGE;
+    s += elevPx(x,y)*SCORE_ELEV_W + aiDist[i]*SCORE_DIST_W;
+    for (const o of enemies) if (o !== e && o.alive && Math.hypot(x-o.x, y-o.y) < AI_SPACING) s -= SCORE_SPACING_PEN;
     if (s > bs){ bs = s; best = { x, y }; }
   }
   return best;
@@ -707,8 +708,8 @@ function execute(){
     const o = g.order;
     if (!o || o.type === 'hold'){ if (o) log('Pièce ' + g.id + ' reste muette.', 'dim'); continue; }
     if (o.type === 'move'){
-      g.mv = mkMove(o.path || [{x:g.x,y:g.y},{x:o.dest.x,y:o.dest.y}], 120);
-      g.bx = (Math.random()-.5)*90; g.by = (Math.random()-.5)*90;
+      g.mv = mkMove(o.path || [{x:g.x,y:g.y},{x:o.dest.x,y:o.dest.y}], MOVE_TICKS);
+      g.bx = (Math.random()-.5)*MOVE_BIAS; g.by = (Math.random()-.5)*MOVE_BIAS;
       g.lastAim = g.lastImpact = null; g.sig = 0; g.sigPos = null;
       if (g.ePlot) g.ePlot.stale = true;
       log('Pièce ' + g.id + ' décroche — réglage perdu.', 'dim');
@@ -716,16 +717,16 @@ function execute(){
     }
     const A = AMMO[o.ammo], guided = o.ammo === 'gui';
     stock[o.ammo]--;
-    const ix = guided ? o.aim.x + (Math.random()-.5)*8 : o.aim.x + g.bx + (Math.random()-.5)*12;
-    const iy = guided ? o.aim.y + (Math.random()-.5)*8 : o.aim.y + g.by + (Math.random()-.5)*12;
+    const ix = guided ? o.aim.x + (Math.random()-.5)*AIM_NOISE_GUIDED : o.aim.x + g.bx + (Math.random()-.5)*AIM_NOISE_UNGUIDED;
+    const iy = guided ? o.aim.y + (Math.random()-.5)*AIM_NOISE_GUIDED : o.aim.y + g.by + (Math.random()-.5)*AIM_NOISE_UNGUIDED;
     if (!guided) g.lastAim = { x:o.aim.x, y:o.aim.y };
     const R = Math.hypot(ix-g.x, iy-g.y);
-    shells.push({ x0:g.x, y0:g.y, tx:ix, ty:iy, t:0, dur:58+R*.075, side:'us', type:o.ammo, gun:g });
+    shells.push({ x0:g.x, y0:g.y, tx:ix, ty:iy, t:0, dur:FLIGHT_BASE+R*FLIGHT_PER_PX, side:'us', type:o.ammo, gun:g });
     firedAny = true;
-    if (g.sigPos && Math.hypot(g.x-g.sigPos.x, g.y-g.sigPos.y) < 30) g.sig += A.sig;
+    if (g.sigPos && Math.hypot(g.x-g.sigPos.x, g.y-g.sigPos.y) < SIG_SAME_POS) g.sig += A.sig;
     else { g.sigPos = { x:g.x, y:g.y }; g.sig = A.sig; }
     if (g.sig >= SIG_PLOT){
-      const err = clamp(160/g.sig, 20, 160);
+      const err = clamp(PLOT_ERR_BASE/g.sig, PLOT_ERR_MIN, PLOT_ERR_MAX);
       const a = Math.random()*6.283, d = Math.random()*err;
       g.ePlot = { x:g.x+Math.cos(a)*d, y:g.y+Math.sin(a)*d, err, stale:false, age:0 };
     }
@@ -734,7 +735,7 @@ function execute(){
 
   const o = fo.order;
   if (o && o.type === 'move'){
-    fo.mv = mkMove(o.path || [{x:fo.x,y:fo.y},{x:o.dest.x,y:o.dest.y}], 120);
+    fo.mv = mkMove(o.path || [{x:fo.x,y:fo.y},{x:o.dest.x,y:o.dest.y}], MOVE_TICKS);
     log('L\'observateur change de poste.', 'dim');
   }
 
@@ -743,17 +744,17 @@ function execute(){
     if (!e.alive || !eo) return;
     if (eo.type === 'move'){
       reachInto(e.x, e.y, MOVE_GUN, aiDist, aiPrev);
-      e.mv = mkMove(pathTo(e.x, e.y, eo.to.x, eo.to.y, aiPrev), 120);
+      e.mv = mkMove(pathTo(e.x, e.y, eo.to.x, eo.to.y, aiPrev), MOVE_TICKS);
       e.threat = 0;
       if (e.seen) log('Mouvement observé : une batterie décroche.', 'blue');
     } else if (eo.type === 'fire'){
       const R = Math.hypot(eo.at.x-e.x, eo.at.y-e.y);
-      for (let k = 0; k < 3; k++){
-        const a = Math.random()*6.283, r = Math.random()*55;
+      for (let k = 0; k < SALVO_SIZE; k++){
+        const a = Math.random()*6.283, r = Math.random()*SALVO_SPREAD;
         shells.push({ x0:e.x, y0:e.y, tx:eo.at.x+Math.cos(a)*r, ty:eo.at.y+Math.sin(a)*r,
-          t:-k*13, dur:70+R*.075, side:'them', type:'he', src:e });
+          t:-k*SALVO_STAGGER, dur:E_FLIGHT_BASE+R*FLIGHT_PER_PX, side:'them', type:'he', src:e });
       }
-      e.threat = Math.min(4, e.threat + 1);
+      e.threat = Math.min(THREAT_MAX, e.threat + 1);
       soundRange(e);
       muzzle(true);
       if (eo.harass) log('Tir de harcèlement sur notre zone de déploiement.', 'warn');
@@ -762,9 +763,9 @@ function execute(){
   refresh();
 }
 function soundRange(e){
-  const prev = e.plot && Math.hypot(e.plot.src.x-e.x, e.plot.src.y-e.y) < 25 ? e.plot : null;
-  const err = prev ? Math.max(28, prev.err-34) : 115;
-  const a = Math.random()*6.283, d = Math.random()*err*.6;
+  const prev = e.plot && Math.hypot(e.plot.src.x-e.x, e.plot.src.y-e.y) < SOUND_SAME_POS ? e.plot : null;
+  const err = prev ? Math.max(SOUND_ERR_MIN, prev.err-SOUND_ERR_IMPROVE) : SOUND_ERR_INIT;
+  const a = Math.random()*6.283, d = Math.random()*err*SOUND_SCATTER;
   e.plot = { x:e.x+Math.cos(a)*d, y:e.y+Math.sin(a)*d, err, src:{ x:e.x, y:e.y } };
   log('Départ entendu — plot à ' + Math.round(err*MPP/10)*10 + ' m près.', 'warn');
 }
@@ -776,8 +777,8 @@ function impactAt(x, y, A, side){
     for (const g of guns){
       if (!g.alive) continue;
       const d = Math.hypot(x-g.x, y-g.y);
-      if (d < 32*b2){
-        g.hp -= d < 15*b2 ? 2 : 1;
+      if (d < FRAG_R*b2){
+        g.hp -= d < FRAG_KILL_R*b2 ? 2 : 1;
         if (g.hp <= 0){ g.alive = false; log('PIÈCE ' + g.id + ' DÉTRUITE.', 'warn'); }
         else log('Éclats sur la pièce ' + g.id + '.', 'warn');
       }
@@ -788,7 +789,7 @@ function impactAt(x, y, A, side){
   for (const e of enemies){
     if (!e.alive) continue;
     const d = Math.hypot(x-e.x, y-e.y);
-    if (d < 220) e.threat = Math.min(4, e.threat + (A.thr === undefined ? 1 : A.thr));
+    if (d < THREAT_R) e.threat = Math.min(THREAT_MAX, e.threat + (A.thr === undefined ? 1 : A.thr));
     if (d < A.reveal){ e.lk = { x:e.x, y:e.y, t:turn }; e.spot = 20; }
     if (A.kill && d < A.kill*bl){
       e.alive = false; e.seen = false;
@@ -803,22 +804,22 @@ function observe(ix, iy, g){
   let best = null, bd = 1e9;
   for (const e of enemies){ if (!e.alive) continue;
     const d = Math.hypot(ix-e.x, iy-e.y); if (d < bd){ bd = d; best = e; } }
-  if (!best || bd > 260){ log('Pièce ' + (g?g.id:'?') + ' : impact observé, rien à proximité.', 'dim'); return; }
+  if (!best || bd > OBSERVE_NEAR){ log('Pièce ' + (g?g.id:'?') + ' : impact observé, rien à proximité.', 'dim'); return; }
   const ang = Math.atan2(best.y-g.y, best.x-g.x);
   const dx = ix-best.x, dy = iy-best.y;
   const along = (dx*Math.cos(ang) + dy*Math.sin(ang))*MPP;
   const side = (-dx*Math.sin(ang) + dy*Math.cos(ang))*MPP;
   const r = v => Math.round(Math.abs(v)/10)*10;
   log(g.id + ' : ' + (along<0 ? 'allongez '+r(along) : 'raccourcissez '+r(along)) + ' m, ' +
-      (side<0 ? r(side)+' à droite' : r(side)+' à gauche') + ' m.', bd<90?'ok':'');
+      (side<0 ? r(side)+' à droite' : r(side)+' à gauche') + ' m.', bd<OBSERVE_GOOD?'ok':'');
 }
 
 function endTurn(){
   turn++;
   for (let i = drones.length-1; i >= 0; i--)
     if (--drones[i].turns <= 0){ drones.splice(i,1); bakeFog(); log('Drone en fin d\'autonomie.','dim'); }
-  for (const g of guns) if (g.ePlot && g.ePlot.stale && ++g.ePlot.age >= 2) g.ePlot = null;
-  for (const e of enemies) e.threat = Math.max(0, e.threat - .6);
+  for (const g of guns) if (g.ePlot && g.ePlot.stale && ++g.ePlot.age >= PLOT_STALE_AGE) g.ePlot = null;
+  for (const e of enemies) e.threat = Math.max(0, e.threat - THREAT_DECAY);
   computeVis(); trackEnemies();
   if (guns.every(g => !g.alive))
     return over('GROUPE DÉTRUIT', 'Plus une pièce en batterie — N pour rejouer', '#c8382a');
@@ -857,7 +858,7 @@ function step(){
     for (const g of guns) if (g.alive) moveUnit(g);
     moveUnit(fo);
     for (const e of enemies) if (e.alive) moveUnit(e);
-    if (fo.mv && rt % 8 === 0) computeVis();
+    if (fo.mv && rt % VIS_RECALC_PERIOD === 0) computeVis();
 
     for (let i = shells.length-1; i >= 0; i--){
       const s = shells[i];
@@ -866,17 +867,17 @@ function step(){
       const A = AMMO[s.type];
       let ix = s.tx, iy = s.ty;
       if (s.side === 'us' && s.type === 'gui'){
-        let best = null, bd = 150;
+        let best = null, bd = GUIDED_SNAP_R;
         for (const e of enemies){
           if (!e.alive || !observed(e.x,e.y)) continue;
           const d = Math.hypot(ix-e.x, iy-e.y);
           if (d < bd){ bd = d; best = e; }
         }
-        if (best){ ix = best.x+(Math.random()-.5)*8; iy = best.y+(Math.random()-.5)*8;
+        if (best){ ix = best.x+(Math.random()-.5)*GUIDED_SNAP_NOISE; iy = best.y+(Math.random()-.5)*GUIDED_SNAP_NOISE;
           log('Guidage terminal — recalage sur l\'objectif.', 'blue'); }
       }
       if (s.side === 'us' && s.type === 'rec'){
-        drones.push({ x:ix, y:iy, turns:3 });
+        drones.push({ x:ix, y:iy, turns:DRONE_TURNS });
         if (s.gun) s.gun.lastImpact = { x:ix, y:iy };
         computeVis(); trackEnemies(); beep();
         log('Drone en station.', 'blue');
@@ -885,7 +886,7 @@ function step(){
       if (s.side === 'us' && s.type === 'icm'){
         for (let k = 0; k < A.subs; k++){
           const a = Math.random()*6.283, r = Math.sqrt(Math.random())*A.spread;
-          subs.push({ x:ix+Math.cos(a)*r, y:iy+Math.sin(a)*r, d:k*6, A, side:'us' });
+          subs.push({ x:ix+Math.cos(a)*r, y:iy+Math.sin(a)*r, d:k*ICM_SUB_STAGGER, A, side:'us' });
         }
         observe(ix, iy, s.gun);
         continue;
@@ -899,7 +900,7 @@ function step(){
 
     const busy = shells.length || subs.length || fo.mv ||
       guns.some(g => g.alive && g.mv) || enemies.some(e => e.alive && e.mv);
-    if (!busy && ++settle > 70) endTurn();
+    if (!busy && ++settle > SETTLE_TICKS) endTurn();
   }
 
   for (const e of enemies) if (e.spot > 0) e.spot--;
@@ -1399,23 +1400,23 @@ function reset(){
   stock={}; for (const id of ORDER) stock[id]=AMMO[id].start;
 
   guns = ['A','B','C'].map((id, i) => ({
-    id, x: 100+Math.random()*90, y: 110+i*190+(Math.random()-.5)*50,
-    hp:2, alive:true, mv:null, sig:0, sigPos:null, ePlot:null,
-    bx:(Math.random()-.5)*90, by:(Math.random()-.5)*90,
+    id, x: GUN_X_MIN+Math.random()*GUN_X_SPAN, y: GUN_Y_TOP+i*GUN_Y_STEP+(Math.random()-.5)*GUN_Y_JITTER,
+    hp:GUN_HP, alive:true, mv:null, sig:0, sigPos:null, ePlot:null,
+    bx:(Math.random()-.5)*MOVE_BIAS, by:(Math.random()-.5)*MOVE_BIAS,
     lastAim:null, lastImpact:null, order:null
   }));
-  fo = { id:'O', x: guns[1].x+170, y: guns[1].y, mv:null, order:null };
+  fo = { id:'O', x: guns[1].x+FO_DX, y: guns[1].y, mv:null, order:null };
 
   // ce qu'ils croient savoir de notre déploiement avant le premier coup
   const cy0 = (guns[0].y + guns[1].y + guns[2].y) / 3;
   const cx0 = (guns[0].x + guns[1].x + guns[2].x) / 3;
-  pZone = { x: cx0 + (Math.random()-.5)*130, y: cy0 + (Math.random()-.5)*200, r: 150, uses: 0 };
+  pZone = { x: cx0 + (Math.random()-.5)*PZONE_JX, y: cy0 + (Math.random()-.5)*PZONE_JY, r: PZONE_R, uses: 0 };
 
   enemies = [];
   for (let i = 0; i < 3; i++){
-    const ex = 640+Math.random()*340, ey = 105+i*175+(Math.random()-.5)*60;
+    const ex = ENEMY_X_MIN+Math.random()*ENEMY_X_SPAN, ey = ENEMY_Y_TOP+i*ENEMY_Y_STEP+(Math.random()-.5)*ENEMY_Y_JITTER;
     enemies.push({ x:ex, y:ey, alive:true, seen:false, spot:0, threat:0, mv:null, plot:null, lk:null,
-      zx: ex+(Math.random()-.5)*130, zy: ey+(Math.random()-.5)*130, zr: 95+Math.random()*50 });
+      zx: ex+(Math.random()-.5)*ZONE_JITTER, zy: ey+(Math.random()-.5)*ZONE_JITTER, zr: ZONE_R_MIN+Math.random()*ZONE_R_SPAN });
   }
   buildRoster();
   computeVis(); trackEnemies(); planAI();
@@ -1428,7 +1429,6 @@ function reset(){
 }
 function frame(){ fnum++; step(); draw(); requestAnimationFrame(frame); }
 buildAmmo(); reset(); frame();
-})();
 </script>
 </body>
 </html>
