@@ -150,7 +150,6 @@ import {
   MAXRANGE, E_RANGE, VIS_R, WOOD_VIS_R, DRONE_R, SIG_PLOT,
   T_OPEN, T_WOOD, T_ROAD, T_MARSH, T_ROCK, TER,
   HILL_COUNT, MARSH_BELOW, MARSH_P, ROCK_ABOVE, ROCK_P, GROVE_COUNT,
-  LOS_EYE_H, LOS_TGT_H, LOS_CLEARANCE,
   MOVE_GUN, MOVE_OBS, DIAG_COST, CLIMB_COST, NO_DEPLOY_ROWS, MOVE_TICKS,
   AMMO, ORDER,
   FLIGHT_BASE, FLIGHT_PER_PX, AIM_NOISE_GUIDED, AIM_NOISE_UNGUIDED, MOVE_BIAS,
@@ -173,6 +172,7 @@ import {
   MAX_PARTS
 } from './src/config.js';
 import { createRng } from './src/rules/rng.js';
+import { losClear as losRule, observed as observedRule } from './src/rules/los.js';
 
 /* graine décidée ici (à terme dans main.js) ; le code de règles ne touche jamais Math.random */
 let rng = createRng((Math.random()*4294967296)>>>0);
@@ -386,25 +386,11 @@ function genTerrainTypes(){
   }
 }
 const elevPx = (x,y) => elev[ei(clamp(Math.floor(x/CELL),0,COLS-1), clamp(Math.floor(y/CELL),0,ROWS-1))];
-function losClear(ox,oy,tx,ty){
-  if (ter[ei(tx,ty)] === T_WOOD) return false;      // ce qui est sous le couvert ne se voit pas
-  const hO = elev[ei(ox,oy)]+LOS_EYE_H, hT = elev[ei(tx,ty)]+LOS_TGT_H;
-  const n = Math.ceil(Math.hypot(tx-ox, ty-oy));
-  if (n < 2) return true;
-  for (let i = 1; i < n; i++){
-    const t = i/n;
-    const cx = Math.round(ox+(tx-ox)*t), cy = Math.round(oy+(ty-oy)*t);
-    const k = ei(cx,cy);
-    if (ter[k] === T_WOOD) return false;
-    if (elev[k] > hO+(hT-hO)*t+LOS_CLEARANCE) return false;
-  }
-  return true;
-}
 function computeVis(){
   const ox = clamp(Math.floor(fo.x/CELL),0,COLS-1), oy = clamp(Math.floor(fo.y/CELL),0,ROWS-1);
   const range = ter[ei(ox,oy)] === T_WOOD ? WOOD_VIS_R : VIS_R;   // sous couvert, on ne voit rien venir
   for (let cy = 0; cy < ROWS; cy++) for (let cx = 0; cx < COLS; cx++)
-    vis[ei(cx,cy)] = (Math.hypot(cx-ox, cy-oy) <= range && losClear(ox,oy,cx,cy)) ? 1 : 0;
+    vis[ei(cx,cy)] = (Math.hypot(cx-ox, cy-oy) <= range && losRule(ter,elev,ox,oy,cx,cy)) ? 1 : 0;
   bakeFog();
 }
 /* déplacement : le terrain se paie en points de mouvement, pas en distance à vol d'oiseau */
@@ -467,16 +453,7 @@ function mkMove(path, d){
   return { path, seg, total, d };
 }
 function budgetOf(u){ return u === fo ? MOVE_OBS : MOVE_GUN; }
-function underDrone(x,y){
-  for (const d of drones) if (Math.hypot(x-d.x, y-d.y) < DRONE_R) return true;
-  return false;
-}
-function observed(x,y){
-  if (underDrone(x,y)) return true;
-  const cx = Math.floor(x/CELL), cy = Math.floor(y/CELL);
-  if (cx<0||cy<0||cx>=COLS||cy>=ROWS) return false;
-  return !!vis[ei(cx,cy)];
-}
+const observed = (x,y) => observedRule(vis, drones, x, y);
 function trackEnemies(){
   for (const e of enemies){
     if (!e.alive){ e.seen = false; continue; }
