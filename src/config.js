@@ -17,12 +17,47 @@ export const SIG_PLOT = 1;               // signature déclenchant un plot de lo
 /* --- terrain --- */
 export const T_OPEN = 0, T_WOOD = 1, T_ROAD = 2, T_MARSH = 3, T_ROCK = 4;
 export const TER = [
-  { n:'Découvert', cost:1,   blast:1,    los:true,  c:'' },
-  { n:'Bois',      cost:1.8, blast:.85,  los:false, c:'#1b2a18' },
-  { n:'Route',     cost:.5,  blast:1.15, los:true,  c:'#6b5c3a' },
-  { n:'Marais',    cost:2.5, blast:.55,  los:true,  c:'#243028' },
-  { n:'Rocaille',  cost:1.4, blast:1.35, los:true,  c:'#3d3f33' }
+  { n:'Découvert', cost:1,   blast:1,    los:true  },
+  { n:'Bois',      cost:1.8, blast:.85,  los:false },
+  { n:'Route',     cost:.5,  blast:1.15, los:true  },
+  { n:'Marais',    cost:2.5, blast:.55,  los:true  },
+  { n:'Rocaille',  cost:1.4, blast:1.35, los:true  }
 ];
+
+/* --- palettes de carte (choix visuel en jeu, sans effet sur le gameplay) ---
+   Chaque palette pilote le pré-rendu de bake.js : bandes de relief, calques de terrain,
+   textures, routes, quadrillage et voile de brouillard. `ter` est indexé par T_WOOD…T_ROCK. */
+export const MAP_PALETTES = {
+  topo: {
+    n:'Topographique',
+    bands:['#cdd6b0','#d7d3a6','#e0cf9a','#e4c48c','#dcb478'],
+    bandLine:'rgba(122,106,68,.35)', grid:'rgba(90,70,40,.06)',
+    ter:{ [T_WOOD]:'#5f7d3e', [T_ROAD]:'#b39b6a', [T_MARSH]:'#8bb0a8', [T_ROCK]:'#b9ac90' },
+    woodSpeck:'rgba(60,88,38,.5)', marshReed:'rgba(70,120,110,.5)', rockSpeck:'rgba(120,105,70,.45)',
+    roads:[[7,'rgba(120,96,54,.9)'],[4,'rgba(190,164,110,.8)']],
+    fog:'rgba(54,48,34,.44)'
+  },
+  staff: {
+    n:'État-major',
+    bands:['#c4cbb2','#ccd2ba','#d3d8c2','#dbe0ca','#e2e6d2'],
+    bandLine:'rgba(90,99,64,.4)', grid:'rgba(60,70,40,.08)',
+    ter:{ [T_WOOD]:'#7f9760', [T_ROAD]:'#b6a884', [T_MARSH]:'#9fb0a6', [T_ROCK]:'#b4b39c' },
+    woodSpeck:'rgba(70,90,50,.5)', marshReed:'rgba(90,120,112,.4)', rockSpeck:'rgba(90,92,72,.4)',
+    roads:[[7,'rgba(90,84,60,.85)'],[4,'rgba(160,150,116,.75)']],
+    fog:'rgba(46,52,40,.46)'
+  },
+  vivid: {
+    n:'Vif',
+    bands:['#b6cc82','#c0d38e','#cbd99a','#d5e0a8','#dee7b6'],
+    bandLine:'rgba(90,120,50,.32)', grid:'rgba(70,110,40,.06)',
+    ter:{ [T_WOOD]:'#4f7a34', [T_ROAD]:'#c2a061', [T_MARSH]:'#6fb0c4', [T_ROCK]:'#c3bd93' },
+    woodSpeck:'rgba(45,95,30,.5)', marshReed:'rgba(60,140,160,.5)', rockSpeck:'rgba(120,110,70,.4)',
+    roads:[[7,'rgba(150,120,60,.9)'],[4,'rgba(210,180,110,.8)']],
+    fog:'rgba(38,50,34,.44)'
+  }
+};
+export const MAP_PALETTE_ORDER = ['topo','staff','vivid'];
+export const DEFAULT_PALETTE = 'topo';
 
 /* --- génération de terrain --- */
 export const HILL_COUNT = 11;

@@ -1,9 +1,10 @@
 /* Entrées : souris, clavier, boutons. Les gestes deviennent des ordres ou des changements de sélection. */
-import { W, H, CELL, COLS, ROWS, AMMO, ORDER } from '../config.js';
+import { W, H, CELL, COLS, ROWS, AMMO, ORDER, MAP_PALETTES, MAP_PALETTE_ORDER } from '../config.js';
 import { ei, clamp } from '../rules/grid.js';
 import { pathTo } from '../rules/reach.js';
 import { S, selUnit, budgetOf } from '../state/state.js';
 import { cv } from '../render/draw.js';
+import { bakeTerrain, bakeFog } from '../render/bake.js';
 import { refresh, refreshRead } from '../render/hud.js';
 
 const $ = id => document.getElementById(id);
@@ -63,8 +64,25 @@ export function buildRoster(){
   box.appendChild(b);
 }
 
+/* Sélecteur de palette de carte : change S.palette et re-bake le terrain et le brouillard. */
+function buildPalette(){
+  const box = $('palette'); box.innerHTML = '';
+  for (const id of MAP_PALETTE_ORDER){
+    const b = document.createElement('button');
+    b.textContent = MAP_PALETTES[id].n;
+    b.classList.toggle('sel', id === S.palette);
+    b.onclick = () => {
+      S.palette = id;
+      bakeTerrain(); bakeFog();
+      for (const c of box.children) c.classList.toggle('sel', c === b);
+    };
+    box.appendChild(b);
+  }
+}
+
 export function initInput({ execute, reset }){
   onExecute = execute; onReset = reset;
+  buildPalette();
 
   cv.addEventListener('mousemove', e => { S.mouse = toMap(e); refreshRead(); });
   cv.addEventListener('click', e => {

@@ -1,5 +1,5 @@
 /* Couches pré-rendues : le relief, le brouillard et la zone de mouvement ne bougent pas d'une frame à l'autre. */
-import { W, H, CELL, COLS, ROWS, T_OPEN, T_WOOD, T_ROAD, T_MARSH, TER, DRONE_R } from '../config.js';
+import { W, H, CELL, COLS, ROWS, T_OPEN, T_WOOD, T_ROAD, T_MARSH, MAP_PALETTES, DRONE_R } from '../config.js';
 import { ei } from '../rules/grid.js';
 import { computeReach } from '../rules/reach.js';
 import { S, selUnit, budgetOf } from '../state/state.js';
@@ -18,12 +18,13 @@ const rctx = reachCv.getContext('2d');
 export const reach = { on:false };
 
 export function bakeTerrain(){
+  const P = MAP_PALETTES[S.palette];
   for (let cy=0;cy<ROWS;cy++) for (let cx=0;cx<COLS;cx++){
     const b = Math.min(4, Math.floor(S.elev[ei(cx,cy)]/20));
-    tctx.fillStyle = ['#1c2417','#222b1b','#293321','#313b26','#3a442c'][b];
+    tctx.fillStyle = P.bands[b];
     tctx.fillRect(cx*CELL, cy*CELL, CELL+1, CELL+1);
   }
-  tctx.strokeStyle = 'rgba(150,168,118,.22)'; tctx.lineWidth = 1;
+  tctx.strokeStyle = P.bandLine; tctx.lineWidth = 1;
   tctx.beginPath();
   for (let cy=0;cy<ROWS;cy++) for (let cx=0;cx<COLS;cx++){
     const b = Math.floor(S.elev[ei(cx,cy)]/20);
@@ -38,18 +39,18 @@ export function bakeTerrain(){
     const t = S.ter[ei(cx,cy)], x = cx*CELL, y = cy*CELL;
     if (t === T_OPEN || t === T_ROAD) continue;
     tctx.globalAlpha = t === T_WOOD ? .8 : .55;
-    tctx.fillStyle = TER[t].c;
+    tctx.fillStyle = P.ter[t];
     tctx.fillRect(x, y, CELL+1, CELL+1);
     tctx.globalAlpha = 1;
     if (t === T_WOOD){
-      tctx.fillStyle = 'rgba(122,152,96,.5)';
+      tctx.fillStyle = P.woodSpeck;
       for (let k=0;k<3;k++){
         tctx.beginPath();
         tctx.arc(x+3+Math.random()*(CELL-6), y+3+Math.random()*(CELL-6), 2+Math.random()*1.6, 0, 6.29);
         tctx.fill();
       }
     } else if (t === T_MARSH){
-      tctx.strokeStyle = 'rgba(126,164,158,.4)'; tctx.lineWidth = 1;
+      tctx.strokeStyle = P.marshReed; tctx.lineWidth = 1;
       tctx.beginPath();
       for (let k=0;k<3;k++){
         const yy = y+4+k*6, xx = x+2+Math.random()*5;
@@ -57,14 +58,14 @@ export function bakeTerrain(){
       }
       tctx.stroke();
     } else {
-      tctx.fillStyle = 'rgba(186,182,158,.4)';
+      tctx.fillStyle = P.rockSpeck;
       for (let k=0;k<4;k++)
         tctx.fillRect(x+2+Math.random()*(CELL-5), y+2+Math.random()*(CELL-5), 1.6, 1.6);
     }
   }
   // routes, tracées en dernier et lissées
   for (const pts of S.roads){
-    for (const [w, col] of [[7,'rgba(70,60,38,.9)'],[4,'rgba(150,132,88,.75)']]){
+    for (const [w, col] of P.roads){
       tctx.strokeStyle = col; tctx.lineWidth = w; tctx.lineJoin = 'round'; tctx.lineCap = 'round';
       tctx.beginPath(); tctx.moveTo(pts[0].x, pts[0].y);
       for (let i=1;i<pts.length-1;i++)
@@ -73,7 +74,7 @@ export function bakeTerrain(){
       tctx.stroke();
     }
   }
-  tctx.strokeStyle = 'rgba(228,225,209,.05)'; tctx.lineWidth = 1;
+  tctx.strokeStyle = P.grid; tctx.lineWidth = 1;
   tctx.beginPath();
   for (let x=0;x<=W;x+=100){ tctx.moveTo(x,0); tctx.lineTo(x,H); }
   for (let y=0;y<=H;y+=100){ tctx.moveTo(0,y); tctx.lineTo(W,y); }
@@ -81,8 +82,9 @@ export function bakeTerrain(){
 }
 
 export function bakeFog(){
+  const fog = MAP_PALETTES[S.palette].fog;
   fctx.clearRect(0,0,W,H);
-  fctx.fillStyle = 'rgba(8,10,7,.62)';
+  fctx.fillStyle = fog;
   for (let cy=0;cy<ROWS;cy++){
     let run = -1;
     for (let cx=0;cx<=COLS;cx++){
@@ -103,7 +105,7 @@ export function bakeFog(){
       fctx.beginPath(); fctx.arc(d.x,d.y,DRONE_R,0,6.29); fctx.fill();
     }
     fctx.globalCompositeOperation = 'source-over';
-    fctx.fillStyle = 'rgba(8,10,7,.62)';
+    fctx.fillStyle = fog;
   }
 }
 

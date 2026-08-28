@@ -92,7 +92,8 @@ game. Each entry: what it is, where, and why it was not fixed.
 - `6.29` utilisé partout à la place de `2*PI` (nombreux appels `arc(...,6.29)` dans
   `render/`). Conservé à l'identique ; non nommé, non corrigé — corriger changerait
   imperceptiblement le rendu des cercles.
-- `SIG_MAX` (config) déclaré mais jamais lu par la logique. Conservé tel quel.
+- `SIG_MAX` (config) non lu par la logique de règle ; désormais lu par `render/draw.js`
+  (`aimPreview`) pour borner la signature projetée affichée en anneaux.
 - HP de l'observateur affiché « 4 » en dur dans le HUD alors qu'il est indestructible
   (`hud.js`). Conservé.
 - `e.zx / e.zy / e.zr` (zone d'incertitude initiale d'une batterie) jamais mis à jour après
@@ -112,6 +113,23 @@ game. Each entry: what it is, where, and why it was not fixed.
   Laissés inline dans `loop/` plutôt que nommés en config : les extraire n'améliore pas la
   testabilité (aucune règle n'en dépend) et gonflerait la config d'une vingtaine de
   constantes purement visuelles. Classés cosmétiques, délibérément non extraits.
+- `SIG_PX` (`render/draw.js`) : px par unité de signature pour dimensionner les anneaux de
+  l'aperçu de visée. Facteur purement visuel, sans effet sur le jeu (le seuil réel de
+  repérage reste `SIG_PLOT`) ; classé cosmétique, gardé inline dans `render/`.
+- Thème clair : le châssis (CSS `:root` d'`index.html`) et les fonds de symboles (`draw.js`)
+  sont passés d'un fond sombre à un fond clair. La bannière de fin de mission reste un
+  overlay sombre volontaire. Choix purement visuels.
+- Palettes de carte commutables en jeu : `MAP_PALETTES` (`config.js`) décrit trois rendus de
+  carte (`topo`, `staff`, `vivid`) — bandes de relief, calques de terrain, textures, routes,
+  quadrillage et **voile de brouillard**. `bake.js` lit la palette active via `S.palette`
+  (défaut `DEFAULT_PALETTE`), un sélecteur 3 boutons dans `input.js` la change et re-bake
+  terrain + brouillard. La palette persiste entre les missions (portée par `S`, pas
+  réinitialisée par `resetMission`). Le brouillard **assombrit** les zones non vues (voile
+  d'ombre translucide propre à chaque palette) : sur terrain clair, un voile clair ne
+  contrastait pas assez, un voile sombre distingue nettement le vu du non-vu tout en laissant
+  deviner le terrain. Le mécanisme de « trou » de vision (`destination-out` sous les drones)
+  est identique. `TER[t].c` a été retiré : les couleurs de terrain vivent désormais dans les
+  palettes, plus dans `TER`.
 
 ## Open questions
 

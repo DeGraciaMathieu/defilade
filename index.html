@@ -6,9 +6,9 @@
 <title>CONTRE-BATTERIE — groupe de trois pièces</title>
 <style>
   :root{
-    --drab:#12160f; --board:#1e241a; --board-hi:#28301f;
-    --chalk:#e4e1d1; --dim:#8b9179; --fire:#d9662b; --alert:#c8382a;
-    --blue:#5f8fb5; --rule:#39432f;
+    --drab:#dcdbcf; --board:#e9e7db; --board-hi:#dedccd;
+    --chalk:#2b2f22; --dim:#6d7358; --fire:#c25812; --alert:#b3302a;
+    --blue:#3f6f95; --rule:#c3c1af;
   }
   *{box-sizing:border-box}
   html,body{margin:0;background:var(--drab);color:var(--chalk);
@@ -22,7 +22,7 @@
   .sub b{color:var(--fire);font-weight:400}
   #wrap{display:grid;grid-template-columns:1fr 356px;gap:12px}
   @media(max-width:1140px){#wrap{grid-template-columns:1fr}}
-  canvas{display:block;width:100%;height:auto;background:#141a12;
+  canvas{display:block;width:100%;height:auto;background:#c9cdb5;
     border:1px solid var(--rule);cursor:crosshair}
   .panel{background:var(--board);border:1px solid var(--rule);padding:12px 14px;margin-bottom:12px}
   .panel h2{font-size:10px;letter-spacing:.24em;color:var(--dim);margin:0 0 10px;
@@ -41,7 +41,7 @@
     text-transform:uppercase;letter-spacing:.16em;font-size:11px}
   .roster .hp{color:var(--dim);letter-spacing:.1em}
   .roster .ord{font-size:10.5px;color:var(--dim)}
-  .roster button.sel .ord{color:#b8bda6}
+  .roster button.sel .ord{color:#55603f}
   .roster .plotted{color:var(--alert)}
   .roster button.dead{opacity:.3;text-decoration:line-through}
 
@@ -54,7 +54,7 @@
     letter-spacing:.14em;font-size:10.5px}
   .ammo .top .k{color:var(--dim)}
   .ammo .d{font-size:10.5px;color:var(--dim)}
-  .ammo button.sel .d{color:#b8bda6}
+  .ammo button.sel .d{color:#55603f}
   .ammo button.out{opacity:.32}
 
   #go{background:var(--fire);border-color:var(--fire);color:#180d06;font-weight:700;
@@ -72,7 +72,7 @@
   #log div{border-bottom:1px dotted var(--rule);padding:3px 0;display:flex;gap:8px}
   #log .n{color:var(--dim);flex:none}
   #log .hit{color:var(--fire)} #log .warn{color:var(--alert)}
-  #log .dim{color:var(--dim)} #log .ok{color:#9dbd76} #log .blue{color:var(--blue)}
+  #log .dim{color:var(--dim)} #log .ok{color:#5c7a2e} #log .blue{color:var(--blue)}
   #log .sep{color:var(--dim);border-bottom:1px solid var(--rule);letter-spacing:.2em;
     text-transform:uppercase;font-size:10px;padding-top:8px}
   .hint{font-size:10.5px;color:var(--dim);line-height:1.7}
@@ -131,6 +131,11 @@
       <div class="panel">
         <h2>Journal</h2>
         <div id="log"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Rendu de carte</h2>
+        <div class="three" id="palette"></div>
       </div>
 
       <div class="panel">

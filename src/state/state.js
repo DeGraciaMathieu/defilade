@@ -1,6 +1,6 @@
 /* L'état du jeu : un seul objet mutable. Les règles n'y touchent jamais, la boucle l'orchestre. */
 import {
-  COLS, ROWS, AMMO, ORDER, MOVE_GUN, MOVE_OBS, GUN_HP, MOVE_BIAS,
+  COLS, ROWS, AMMO, ORDER, MOVE_GUN, MOVE_OBS, GUN_HP, MOVE_BIAS, DEFAULT_PALETTE,
   GUN_X_MIN, GUN_X_SPAN, GUN_Y_TOP, GUN_Y_STEP, GUN_Y_JITTER, FO_DX,
   PZONE_JX, PZONE_JY, PZONE_R,
   ENEMY_X_MIN, ENEMY_X_SPAN, ENEMY_Y_TOP, ENEMY_Y_STEP, ENEMY_Y_JITTER,
@@ -12,7 +12,7 @@ export const S = {
   rng:null,
   /* phase de jeu */
   phase:'plan', rt:0, settle:0, turn:1, sel:0, otype:'fire', ammo:'reg',
-  banner:null, mouse:{ x:-1, y:-1 },
+  banner:null, mouse:{ x:-1, y:-1 }, palette:DEFAULT_PALETTE,
   stock:{},
   /* unités */
   guns:[], enemies:[], eOrders:[], fo:null, pZone:null,
