@@ -1,5 +1,8 @@
 /* Rendu d'une frame complète : couches, symboles tactiques, projectiles, effets, UI canvas. */
-import { W, H, CELL, COLS, ROWS, DRONE_R, MAXRANGE, AMMO } from '../config.js';
+import {
+  W, H, CELL, COLS, ROWS, DRONE_R, MAXRANGE, AMMO, MPP,
+  AIM_NOISE_GUIDED, AIM_NOISE_UNGUIDED, MOVE_BIAS, SIG_PLOT, SIG_MAX
+} from '../config.js';
 import { ei, clamp } from '../rules/grid.js';
 import { observed } from '../rules/los.js';
 import { pathTo } from '../rules/reach.js';
@@ -10,6 +13,7 @@ import { scarCv, SPR } from './effects.js';
 export const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 const lerp = (a,b,t) => a + (b-a)*t;
+const SIG_PX = 30;   // px par unité de signature — échelle d'affichage des anneaux (cosmétique)
 
 export function draw(){
   ctx.save();
@@ -52,8 +56,10 @@ export function draw(){
   if (S.phase === 'plan'){
     const u = selUnit();
     if (u && S.otype === 'fire' && u !== S.fo){
-      ctx.strokeStyle='rgba(217,102,43,.18)'; ctx.setLineDash([3,7]);
+      ctx.strokeStyle='rgba(194,88,18,.34)'; ctx.setLineDash([3,7]);
       ctx.beginPath(); ctx.arc(u.x,u.y,MAXRANGE,0,6.29); ctx.stroke(); ctx.setLineDash([]);
+      const aim = (u.order && u.order.type === 'fire') ? u.order.aim : (S.mouse.x >= 0 ? S.mouse : null);
+      if (aim) aimPreview(u, aim, S.ammo);
     } else if (u && S.otype === 'move' && reach.on){
       ctx.drawImage(reachCv, 0, 0);
       if (S.mouse.x >= 0){
@@ -88,10 +94,10 @@ export function draw(){
 
   for (const g of S.guns){
     if (!g.alive || !g.lastAim || !g.lastImpact) continue;
-    ctx.strokeStyle='rgba(228,225,209,.32)'; ctx.setLineDash([3,4]); ctx.lineWidth=1;
+    ctx.strokeStyle='rgba(42,47,34,.34)'; ctx.setLineDash([3,4]); ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(g.lastAim.x,g.lastAim.y); ctx.lineTo(g.lastImpact.x,g.lastImpact.y); ctx.stroke();
     ctx.setLineDash([]);
-    cross(g.lastAim.x, g.lastAim.y, 5, 'rgba(228,225,209,.4)');
+    cross(g.lastAim.x, g.lastAim.y, 5, 'rgba(42,47,34,.42)');
     cross(g.lastImpact.x, g.lastImpact.y, 6, 'rgba(217,102,43,.8)');
   }
 
@@ -168,7 +174,7 @@ export function draw(){
 
   drawOOB();
 
-  ctx.fillStyle='rgba(228,225,209,.45)'; ctx.font='11px ui-monospace,monospace'; ctx.textAlign='left';
+  ctx.fillStyle='rgba(42,47,34,.6)'; ctx.font='11px ui-monospace,monospace'; ctx.textAlign='left';
   const u = selUnit();
   const lbl = S.phase === 'plan'
     ? 'ORDRES — ' + (u ? (u === S.fo ? 'observateur' : 'pièce ' + u.id) + ' : ' +
@@ -200,7 +206,7 @@ function oobIcon(x, y, col, label, state, hp){
     ctx.beginPath(); ctx.moveTo(2,-6); ctx.lineTo(28,6); ctx.moveTo(28,-6); ctx.lineTo(2,6); ctx.stroke();
     ctx.fillStyle = '#4a5140';
   } else {
-    ctx.fillStyle = 'rgba(8,10,7,.7)'; ctx.fillRect(0,-8,30,16);
+    ctx.fillStyle = 'rgba(247,245,236,.78)'; ctx.fillRect(0,-8,30,16);
     ctx.strokeStyle = col; ctx.lineWidth = 1.4;
     if (state === 'unseen') ctx.setLineDash([3,3]);
     ctx.strokeRect(0,-8,30,16);
@@ -224,19 +230,19 @@ function oobIcon(x, y, col, label, state, hp){
 
 function drawOOB(){
   const h = 42;
-  ctx.fillStyle = 'rgba(8,11,7,.74)'; ctx.fillRect(0, 0, W, h);
-  ctx.strokeStyle = 'rgba(57,67,47,.9)'; ctx.lineWidth = 1;
+  ctx.fillStyle = 'rgba(247,245,236,.82)'; ctx.fillRect(0, 0, W, h);
+  ctx.strokeStyle = 'rgba(120,128,96,.9)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, h+.5); ctx.lineTo(W, h+.5); ctx.stroke();
   ctx.font = '9px ui-monospace,monospace';
 
-  ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(139,145,121,.9)';
+  ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(88,94,68,.95)';
   ctx.fillText('NOTRE GROUPE', 14, 13);
   S.guns.forEach((g, i) => {
     oobIcon(14 + i*40, 26, '#7d9c56', g.id, g.alive ? 'ok' : 'dead', g.alive ? g.hp : null);
   });
 
   const startX = W - 14 - (S.enemies.length*40 - 10);
-  ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(139,145,121,.9)';
+  ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(88,94,68,.95)';
   ctx.fillText('BATTERIES ADVERSES', W - 14, 13);
   S.enemies.forEach((e, i) => {
     const known = e.seen || e.spot > 0;
@@ -246,10 +252,60 @@ function drawOOB(){
 
   const alive = S.enemies.filter(e => e.alive).length;
   const mine = S.guns.filter(g => g.alive).length;
-  ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(139,145,121,.65)';
+  ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(88,94,68,.75)';
   ctx.fillText(mine + ' pièce' + (mine>1?'s':'') + ' en batterie  ·  ' +
     alive + ' objectif' + (alive>1?'s':'') + ' restant' + (alive>1?'s':''), W/2, 26);
   ctx.textAlign = 'left';
+}
+
+/* Aperçu de visée pour la pièce sélectionnée : impact prévu + dispersion, signature projetée, lecture au point visé. */
+function aimPreview(u, aim, ammo){
+  const A = AMMO[ammo];
+
+  // 1. impact prévu et dispersion — l'obus-drone ne frappe pas, on l'exclut
+  if (ammo === 'gui'){
+    // le guidé se recale en vol : faible incertitude autour du point visé
+    ctx.strokeStyle='rgba(157,189,118,.6)'; ctx.setLineDash([2,3]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(aim.x, aim.y, AIM_NOISE_GUIDED, 0, 6.29); ctx.stroke(); ctx.setLineDash([]);
+  } else if (ammo !== 'rec'){
+    if (u.lastAim && u.lastImpact){
+      // écart connu depuis cette position : on projette le point d'impact réel, à un bruit résiduel près
+      const px = aim.x + (u.lastImpact.x-u.lastAim.x), py = aim.y + (u.lastImpact.y-u.lastAim.y);
+      ctx.strokeStyle='rgba(42,47,34,.4)'; ctx.setLineDash([2,3]); ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(aim.x,aim.y); ctx.lineTo(px,py); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle='rgba(217,102,43,.7)'; ctx.lineWidth=1.2;
+      ctx.beginPath(); ctx.arc(px, py, AIM_NOISE_UNGUIDED/2, 0, 6.29); ctx.stroke();
+      cross(px, py, 4, 'rgba(217,102,43,.9)');
+      ctx.fillStyle='rgba(217,102,43,.85)'; ctx.font='8px ui-monospace,monospace'; ctx.textAlign='center';
+      ctx.fillText('IMPACT PRÉVU', px, py + AIM_NOISE_UNGUIDED/2 + 9); ctx.textAlign='left';
+    } else {
+      // pièce non réglée : le biais est inconnu, l'impact peut tomber n'importe où dans ce cercle
+      ctx.strokeStyle='rgba(200,56,42,.5)'; ctx.setLineDash([4,4]); ctx.lineWidth=1.2;
+      ctx.beginPath(); ctx.arc(aim.x, aim.y, MOVE_BIAS/2, 0, 6.29); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle='rgba(200,56,42,.7)'; ctx.font='8px ui-monospace,monospace'; ctx.textAlign='center';
+      ctx.fillText('NON RÉGLÉE', aim.x, aim.y + MOVE_BIAS/2 + 10); ctx.textAlign='left';
+    }
+  }
+
+  // 2. signature projetée par ce tir : anneaux autour de la pièce, rouges si le seuil de repérage est franchi
+  const proj = Math.min(SIG_MAX, u.sig + A.sig);
+  const willPlot = proj >= SIG_PLOT;
+  const col = willPlot ? '200,56,42' : '95,143,181';
+  ctx.strokeStyle='rgba(200,56,42,.28)'; ctx.setLineDash([2,5]); ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(u.x, u.y, SIG_PLOT*SIG_PX, 0, 6.29); ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle='rgba('+col+',.45)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(u.x, u.y, proj*SIG_PX, 0, 6.29); ctx.stroke();
+  ctx.fillStyle='rgba('+col+',.8)'; ctx.font='8px ui-monospace,monospace'; ctx.textAlign='center';
+  ctx.fillText(willPlot ? 'REPÉRAGE ▲' : 'discret', u.x, u.y - proj*SIG_PX - 4); ctx.textAlign='left';
+
+  // 3. lecture flottante distance / azimut au point visé
+  const d = Math.round(Math.hypot(u.x-aim.x, u.y-aim.y)*MPP/10)*10;
+  let ang = Math.atan2(aim.y-u.y, aim.x-u.x) + Math.PI/2; if (ang < 0) ang += 6.283185;
+  const mil = Math.round(ang/6.283185*6400/10)*10;
+  const oor = d > MAXRANGE*MPP;
+  ctx.font='9px ui-monospace,monospace'; ctx.textAlign='left';
+  ctx.fillStyle = oor ? 'rgba(179,48,42,.95)' : 'rgba(42,47,34,.9)';
+  ctx.fillText(d+' m'+(oor?' ✕':'')+'  ·  '+mil+' mil', aim.x+12, aim.y-10);
 }
 
 function polyline(pts, c){
@@ -274,7 +330,7 @@ function unit(x,y,c,kind,label,selected){
     ctx.strokeStyle='rgba(217,102,43,.85)'; ctx.lineWidth=1.2;
     ctx.strokeRect(-18,-14,36,28);
   }
-  ctx.fillStyle='rgba(8,10,7,.62)'; ctx.fillRect(-13,-9,26,18);
+  ctx.fillStyle='rgba(247,245,236,.72)'; ctx.fillRect(-13,-9,26,18);
   ctx.strokeStyle=c; ctx.lineWidth=1.6; ctx.strokeRect(-13,-9,26,18);
   ctx.fillStyle=c;
   if (kind === 'art'){ ctx.beginPath(); ctx.arc(0,0,3.2,0,6.29); ctx.fill(); }
